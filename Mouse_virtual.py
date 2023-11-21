@@ -1,7 +1,9 @@
 import cv2
 import mediapipe as mp
 import pyautogui
-
+import keyboard
+import math
+import time
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
 
@@ -12,7 +14,14 @@ hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_c
 cap = cv2.VideoCapture(0)
 cap.set(3, 640)
 cap.set(4, 480)
+gesture_threshold = 30
+time_between_gestures = 2
+last_gesture_time = time.time()
 
+finger_index_up = False
+finger_pinky_up = False
+finger_thumb_up = False
+gesture_active = False
 # Definir el tamaño del marco
 frame_width, frame_height = 640, 480
 
@@ -50,6 +59,9 @@ while cap.isOpened():
     image.flags.writeable = True
     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
+    gesture_pinch = False
+    gesture_pinky = False
+
     # Dimensiones del frame
     height, width, _ = image.shape
 
@@ -65,12 +77,30 @@ while cap.isOpened():
             index_tip = finger_landmarks[mp_hands.HandLandmark.INDEX_FINGER_TIP]
             middle_tip = finger_landmarks[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
             ring_tip = finger_landmarks[mp_hands.HandLandmark.RING_FINGER_TIP]
+            thumb_tip = finger_landmarks[mp_hands.HandLandmark.THUMB_TIP]
+            pinky_tip = finger_landmarks[mp_hands.HandLandmark.PINKY_TIP]
+            px, py = int(pinky_tip.x * width), int(pinky_tip.y * height)
+            tx, ty = int(thumb_tip.x * width), int(thumb_tip.y * height)
 
             # Coordenadas de los dedos para realizar acciones
             ix, iy = int(index_tip.x * image.shape[1]), int(index_tip.y * image.shape[0])
             mx, my = int(middle_tip.x * image.shape[1]), int(middle_tip.y * image.shape[0])
             rx, ry = int(ring_tip.x * image.shape[1]), int(ring_tip.y * image.shape[0])
 
+            distance_index_thumb = math.sqrt((tx - ix) ** 2 + (ty - iy) ** 2)
+            distance_pinky = math.sqrt((px - ix) ** 2 + (py - iy) ** 2)
+
+            if distance_index_thumb < gesture_threshold:
+                gesture_pinch = True
+                finger_thumb_up = True
+            else:
+                finger_thumb_up = False
+            if distance_pinky < gesture_threshold:
+                gesture_pinky = True
+                finger_pinky_up = True
+            else:
+                finger_pinky_up = False
+            current_time = time.time()
             # Verificar si el dedo índice está dentro del rectángulo delimitador
             if bounding_box['left']+5 < ix < bounding_box['right']+5 and bounding_box[
                 'top'] < iy < \
@@ -105,7 +135,41 @@ while cap.isOpened():
                     if ry < my:
                        cv2.putText(image, "Haciendo clic", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                        cv2.circle(image, (ix, iy), 12, (255, 255, 255),2)  # Cambia el valor de 2 según el grosor del borde que desees
+                       pyautogui.click()
+                if gesture_pinch and current_time - last_gesture_time >= time_between_gestures:
+                    if not gesture_active:
+                        keyboard.press('ctrl')
+                        gesture_active = True
+                    time.sleep(2)
+                    print('cambio de pestanias')
+                    keyboard.press_and_release('tab')
 
+                elif gesture_active:
+                    keyboard.release('ctrl')
+                    gesture_active = False
+
+                if gesture_pinky:
+                    keyboard.press_and_release('right')
+                    time.sleep(1)  # Ajusta el tiempo de espera entre acciones
+
+                # verifica si los dedos están levantados considerando
+                # tanto la distancia como las posiciones relativas de los dedos en el eje Y
+                if ix < mx and iy < my and ry < my:
+                    finger_index_up = True
+                    finger_pinky_up = True
+                    finger_thumb_up = True
+                else:
+                    finger_index_up = False
+                    finger_pinky_up = False
+                    finger_thumb_up = False
+                current_time = time.time()
+                if finger_index_up and finger_pinky_up and finger_thumb_up:
+                    if current_time - last_gesture_time >= time_between_gestures:
+                        # Mostrar el One Scrren Keyboard
+                        time.sleep(2)
+                        print('teclado')
+                        keyboard.press_and_release('windows + ctrl + o')
+                        last_gesture_time = current_time
     # Dibujar el rectángulo delimitador en el marco
     cv2.rectangle(image, (bounding_box['left'], bounding_box['top']), (bounding_box['right'], bounding_box['bottom']),
                   (0, 255, 0), 2)
@@ -114,6 +178,6 @@ while cap.isOpened():
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-hands.close()
+#hands.close()
 cap.release()
 cv2.destroyAllWindows()
