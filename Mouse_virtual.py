@@ -79,6 +79,7 @@ while cap.isOpened():
             ring_tip = finger_landmarks[mp_hands.HandLandmark.RING_FINGER_TIP]
             thumb_tip = finger_landmarks[mp_hands.HandLandmark.THUMB_TIP]
             pinky_tip = finger_landmarks[mp_hands.HandLandmark.PINKY_TIP]
+            
             px, py = int(pinky_tip.x * width), int(pinky_tip.y * height)
             tx, ty = int(thumb_tip.x * width), int(thumb_tip.y * height)
 
