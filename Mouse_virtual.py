@@ -1,11 +1,11 @@
-import cv2
-import mediapipe as mp
-import pyautogui
+import cv2 # OpenCV para procesamiento de imágenes y vídeo
+import mediapipe as mp #para detección y seguimiento de manos
+import pyautogui #para el control del cursor del mouse y acciones en pantalla
 import math
 import glob
 import os
 
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(0) #para capturar imágenes desde la webcam.
 
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
@@ -41,7 +41,7 @@ prev_fingers_together = False
 react_folder = 'emojis'
 react_files = glob.glob(os.path.join(react_folder, '*.png'))
 
-def open_image(gesture):
+def open_image(gesture): # muestra una imagen en pantalla basada en el gesto detectado
     if gesture in GESTURES.values():
         # Obtener el índice de la imagen correspondiente al gesto
         image_index = list(GESTURES.values()).index(gesture)
@@ -85,7 +85,7 @@ with mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.5, min_tracking_
                 # Obtener las coordenadas de los extremos de los dedos
                 index_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
                 middle_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
-                thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+                thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP] #detecta el extremo del pulgar
 
                 mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
