@@ -1,158 +1,119 @@
 import cv2
 import mediapipe as mp
 import pyautogui
-import math
-import glob
-import os
-
-cap = cv2.VideoCapture(0)
 
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
 
-# Inicializar PyAutoGUI
-pyautogui.FAILSAFE = False  # Desactivar la función de seguridad de PyAutoGUI
+# Inicializar el modelo de MediaPipe Hands
+hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.5)
 
-# Obtener el tamaño de la pantalla
-screen_width, screen_height = pyautogui.size()
+# Configuración de la cámara
+cap = cv2.VideoCapture(0)
+cap.set(3, 640)
+cap.set(4, 480)
 
-# Definir las coordenadas del rectángulo delimitador
-rectangle_coordinates = [(0, 0), (screen_width, screen_height)]
+# Definir el tamaño del marco
+frame_width, frame_height = 640, 480
 
-# Ajustar la sensibilidad del movimiento del puntero
-scale_factor = 2
+# Definir el tamaño del rectángulo delimitador
+bounding_box_width, bounding_box_height = 300, 200
 
-# Definir umbrales para gestos
-OPEN_HAND_THRESHOLD = 0.1  # Umbral para determinar si la mano está abierta o cerrada
-FINGERS_TOGETHER_DISTANCE_THRESHOLD = 0.1  # Umbral para determinar si el índice y medio están juntos
-GESTURE_THRESHOLD = 200
-
-# Definir gestos
-GESTURES = {
-    "thumbs_up": "thumbs_up",
-    "thumbs_down": "thumbs_down",
-    "peace_sign": "peace_sign",
-    "handshake": "handshake",
+# Calcular las coordenadas del rectángulo delimitador en el centro del marco
+bounding_box = {
+    'left': int((frame_width - bounding_box_width) / 2),
+    'top': int((frame_height - bounding_box_height) / 2),
+    'right': int((frame_width + bounding_box_width) / 2),
+    'bottom': int((frame_height + bounding_box_height) / 2)
 }
 
-# Estado anterior de los dedos índice y medio
-prev_fingers_together = False
+# Número de muestras para el filtro de media móvil
+num_samples = 5
+# Listas para almacenar las coordenadas anteriores
+prev_x_samples = [0] * num_samples
+prev_y_samples = [0] * num_samples
+alpha = 0.5
 
-react_folder = 'emojis'
-react_files = glob.glob(os.path.join(react_folder, '*.png'))
+while cap.isOpened():
+    ret, frame = cap.read()
+    frame = cv2.flip(frame, 1)
+    if not ret:
+        break
 
-def open_image(gesture):
-    if gesture in GESTURES.values():
-        # Obtener el índice de la imagen correspondiente al gesto
-        image_index = list(GESTURES.values()).index(gesture)
-        image_path = react_files[image_index]
+    # Convertir la imagen a RGB para MediaPipe
+    image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    image.flags.writeable = False
 
-        # Mostrar la imagen en pantalla completa
-        image = cv2.imread(image_path)
-        cv2.imshow('Imagen', image)
-        cv2.waitKey(4000)  # Esperar 1 segundo antes de cambiar de imagen
+    # Detectar manos en la imagen
+    results = hands.process(image)
 
-with mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.5, min_tracking_confidence=0.5) as hands:
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            print("Error al capturar el fotograma")
-            break
+    image.flags.writeable = True
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-        frame = cv2.flip(frame, 1)
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    # Dimensiones del frame
+    height, width, _ = image.shape
 
-        results = hands.process(rgb_frame)
+    if results.multi_hand_landmarks:
+        for hand_landmarks in results.multi_hand_landmarks:
+            # Dibujar los landmarks de la mano
+            mp_drawing.draw_landmarks(image, hand_landmarks, mp_hands.HAND_CONNECTIONS,
+                                      mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
+                                      mp_drawing.DrawingSpec(color=(250, 44, 250), thickness=2, circle_radius=2))
 
-        # Calcular el centro del frame
-        center_x = int(frame.shape[1] / 2)
-        center_y = int(frame.shape[0] / 2)
+            # Obtener las coordenadas de los landmarks de los dedos
+            finger_landmarks = hand_landmarks.landmark
+            index_tip = finger_landmarks[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+            middle_tip = finger_landmarks[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
+            ring_tip = finger_landmarks[mp_hands.HandLandmark.RING_FINGER_TIP]
 
-        # Calcular la mitad de la anchura y altura del rectángulo
-        half_width = int((rectangle_coordinates[1][0] - rectangle_coordinates[0][0]) / 2)
-        half_height = int((rectangle_coordinates[1][1] - rectangle_coordinates[0][1]) / 2)
+            # Coordenadas de los dedos para realizar acciones
+            ix, iy = int(index_tip.x * image.shape[1]), int(index_tip.y * image.shape[0])
+            mx, my = int(middle_tip.x * image.shape[1]), int(middle_tip.y * image.shape[0])
+            rx, ry = int(ring_tip.x * image.shape[1]), int(ring_tip.y * image.shape[0])
 
-        # Calcular las nuevas coordenadas del rectángulo delimitador
-        new_rectangle_coordinates = [
-            (center_x - half_width, center_y - half_height),
-            (center_x + half_width, center_y + half_height)
-        ]
+            # Verificar si el dedo índice está dentro del rectángulo delimitador
+            if bounding_box['left']+5 < ix < bounding_box['right']+5 and bounding_box[
+                'top'] < iy < \
+                    bounding_box['bottom']:
+                # Escalar las coordenadas al tamaño de la pantalla
+                screen_x = int(
+                    (ix - bounding_box['left']) / (bounding_box_width) * pyautogui.size().width)
+                screen_y = int(
+                    (iy - bounding_box['top']) / (bounding_box_height) * pyautogui.size().height)
 
-        if results.multi_hand_landmarks:
-            for hand_landmarks in results.multi_hand_landmarks:
-                mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+                # Aplicar un filtro de media móvil a las coordenadas del puntero
+                prev_x_samples.pop(0)
+                prev_y_samples.pop(0)
+                prev_x_samples.append(screen_x)
+                prev_y_samples.append(screen_y)
+                smoothed_x = int(sum(prev_x_samples) / num_samples)
+                smoothed_y = int(sum(prev_y_samples) / num_samples)
 
-                # Obtener las coordenadas de los extremos de los dedos
-                index_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
-                middle_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
-                thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+                # Dentro del bucle while donde se actualizan las coordenadas del puntero
+                smoothed_x = alpha * smoothed_x + (1 - alpha) * screen_x
+                smoothed_y = alpha * smoothed_y + (1 - alpha) * screen_y
 
-                mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+                # Invertir horizontalmente las coordenadas del puntero
+                inverted_x = pyautogui.size().width - smoothed_x
+                # Dibujar un círculo si el índice y medio están juntos
+                distance_threshold = 30
+                if abs(ix - mx) < distance_threshold and abs(iy - my) < distance_threshold:
+                    cv2.circle(image, (ix, iy), 10, (255, 0, 0), -1)
+                    print("Activo puntero")
+                    pyautogui.moveTo(smoothed_x, smoothed_y)
+                    # Hacer clic si el anular se dobla
+                    if ry < my:
+                       cv2.putText(image, "Haciendo clic", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                       cv2.circle(image, (ix, iy), 12, (255, 255, 255),2)  # Cambia el valor de 2 según el grosor del borde que desees
 
-                cv2.line(frame, (int(index_finger_tip.x * frame.shape[1]), int(index_finger_tip.y * frame.shape[0])),
-                         (int(middle_finger_tip.x * frame.shape[1]), int(middle_finger_tip.y * frame.shape[0])), (0, 255, 0), 2)
+    # Dibujar el rectángulo delimitador en el marco
+    cv2.rectangle(image, (bounding_box['left'], bounding_box['top']), (bounding_box['right'], bounding_box['bottom']),
+                  (0, 255, 0), 2)
+    cv2.imshow('Hand Tracking', image)
 
-                # Calcula la distancia entre los dedos índice y medio
-                distance_clik_finger = math.dist((index_finger_tip.x * frame.shape[1], index_finger_tip.y * frame.shape[0]),
-                                     (middle_finger_tip.x * frame.shape[1], middle_finger_tip.y * frame.shape[0]))
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
 
-                # Obtener las coordenadas en píxeles
-                index_finger_tip_pixel = (int(index_finger_tip.x * screen_width * scale_factor),
-                                            int(index_finger_tip.y * screen_height * scale_factor))
-                middle_finger_tip_pixel = (int(middle_finger_tip.x * screen_width * scale_factor),
-                                            int(middle_finger_tip.y * screen_height * scale_factor))
-
-                # Calcular el promedio de las coordenadas de los extremos de los dedos
-                pointer_x = (index_finger_tip_pixel[0] + middle_finger_tip_pixel[0]) // 2
-                pointer_y = (index_finger_tip_pixel[1] + middle_finger_tip_pixel[1]) // 2
-                
-                # print(f"Distancia entre dedos: ({distance_clik_finger})")
-                # # Verifica si la mano está cerca de la región de los gestos
-                # if distance_clik_finger < 40 and pointer_y > screen_height - GESTURE_THRESHOLD:
-                #     pyautogui.click()
-                #     print("se realizo clik")
-
-
-                # Calcular la distancia entre los extremos de los dedos índice y medio
-                distance_fingers_together = ((index_finger_tip.x - middle_finger_tip.x)**2 +
-                                              (index_finger_tip.y - middle_finger_tip.y)**2)**0.5
-                distance_thumb_index_y = thumb_tip.y - index_finger_tip.y
-                distance_thumb_index_x = thumb_tip.x - index_finger_tip.x
-
-                # Detectar si la mano está abierta o cerrada
-                hand_open = distance_fingers_together > OPEN_HAND_THRESHOLD
-
-                # Mover el puntero si la mano está abierta
-                # if hand_open:
-                    
-                #     print(f"Coordenadas del puntero: ({pointer_x}, {pointer_y}")
-                #     # Mover el puntero del ratón
-                #     pyautogui.moveTo(pointer_x, pointer_y)
-
-                # Identificar el gesto realizado
-                if distance_thumb_index_y < 0.05:
-                    if distance_thumb_index_x > 0.1:
-                        gesture = GESTURES["handshake"]
-                    else:
-                        gesture = GESTURES["thumbs_up"]
-                elif distance_thumb_index_y > 0.05:
-                    gesture = GESTURES["thumbs_down"]
-                elif index_finger_tip.x < middle_finger_tip.x:
-                        gesture = GESTURES["peace_sign"]
-                else:
-                    gesture = None
-
-                # Mostrar el gesto
-                print(f"Gesto: {gesture}")
-                open_image(gesture)
-
-            # Dibujar el rectángulo delimitador en el frame
-            cv2.rectangle(frame, new_rectangle_coordinates[0], new_rectangle_coordinates[1], (0, 255, 0), 2)
-
-        cv2.imshow('Hand Tracking', frame)
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
+hands.close()
 cap.release()
 cv2.destroyAllWindows()
