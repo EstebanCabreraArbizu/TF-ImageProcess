@@ -139,7 +139,7 @@ with mp_hands.Hands(
             if index_finger_extended:
                 print("hecho")
                 try:
-                    exec(open("apuntando.py").read())  # Ejecuta apuntando.py
+                    exec(open("Mouse_virtual.py").read())  # Ejecuta apuntando.py
                 except Exception as e:
                     print("Error al ejecutar apuntando.py:", e)
 
