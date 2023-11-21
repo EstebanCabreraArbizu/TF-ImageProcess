@@ -64,6 +64,7 @@ while cap.isOpened():
             if not gesture_active:
                 keyboard.press('ctrl')
                 gesture_active = True
+            time.sleep(2)
             keyboard.press_and_release('tab')
         elif gesture_active:
             keyboard.release('ctrl')
