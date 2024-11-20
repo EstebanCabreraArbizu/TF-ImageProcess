@@ -4,6 +4,7 @@ import pyautogui
 import keyboard
 import math
 import time
+
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
 
@@ -42,7 +43,7 @@ num_samples = 5
 prev_x_samples = [0] * num_samples
 prev_y_samples = [0] * num_samples
 alpha = 0.5
-
+distancia = 50
 while cap.isOpened():
     ret, frame = cap.read()
     frame = cv2.flip(frame, 1)
@@ -79,6 +80,7 @@ while cap.isOpened():
             ring_tip = finger_landmarks[mp_hands.HandLandmark.RING_FINGER_TIP]
             thumb_tip = finger_landmarks[mp_hands.HandLandmark.THUMB_TIP]
             pinky_tip = finger_landmarks[mp_hands.HandLandmark.PINKY_TIP]
+
             px, py = int(pinky_tip.x * width), int(pinky_tip.y * height)
             tx, ty = int(thumb_tip.x * width), int(thumb_tip.y * height)
 
@@ -101,76 +103,86 @@ while cap.isOpened():
             else:
                 finger_pinky_up = False
             current_time = time.time()
-            # Verificar si el dedo índice está dentro del rectángulo delimitador
-            if bounding_box['left']+5 < ix < bounding_box['right']+5 and bounding_box[
-                'top'] < iy < \
+
+            if(
+                abs(mx - rx) < distancia and abs(my - ry) < distancia and
+                abs(rx - px) < distancia and abs(ry - py) < distancia
+            ):
+                print("Los dedos índice, anular y meñique están juntos y estirados")
+                scroll_active = True
+                pyautogui.scroll(10)  # Activar el scroll
+            else:
+                scroll_active = False
+                pyautogui.scroll(-10) # Desactivar el scroll si los dedos no están juntos y estirados
+
+            if not scroll_active:
+                # Verificar si el dedo índice está dentro del rectángulo delimitador
+                if bounding_box['left']+5 < ix < bounding_box['right']+5 and bounding_box[
+                    'top'] < iy < \
                     bounding_box['bottom']:
-                # Escalar las coordenadas al tamaño de la pantalla
-                screen_x = int(
-                    (ix - bounding_box['left']) / (bounding_box_width) * pyautogui.size().width)
-                screen_y = int(
-                    (iy - bounding_box['top']) / (bounding_box_height) * pyautogui.size().height)
+                    # Escalar las coordenadas al tamaño de la pantalla
+                    screen_x = int(
+                      (ix - bounding_box['left']) / (bounding_box_width) * pyautogui.size().width)
+                    screen_y = int(
+                       (iy - bounding_box['top']) / (bounding_box_height) * pyautogui.size().height)
 
-                # Aplicar un filtro de media móvil a las coordenadas del puntero
-                prev_x_samples.pop(0)
-                prev_y_samples.pop(0)
-                prev_x_samples.append(screen_x)
-                prev_y_samples.append(screen_y)
-                smoothed_x = int(sum(prev_x_samples) / num_samples)
-                smoothed_y = int(sum(prev_y_samples) / num_samples)
+                    # Aplicar un filtro de media móvil a las coordenadas del puntero
+                    prev_x_samples.pop(0)
+                    prev_y_samples.pop(0)
+                    prev_x_samples.append(screen_x)
+                    prev_y_samples.append(screen_y)
+                    smoothed_x = int(sum(prev_x_samples) / num_samples)
+                    smoothed_y = int(sum(prev_y_samples) / num_samples)
 
-                # Dentro del bucle while donde se actualizan las coordenadas del puntero
-                smoothed_x = alpha * smoothed_x + (1 - alpha) * screen_x
-                smoothed_y = alpha * smoothed_y + (1 - alpha) * screen_y
+                        # Dentro del bucle while donde se actualizan las coordenadas del puntero
+                    smoothed_x = alpha * smoothed_x + (1 - alpha) * screen_x
+                    smoothed_y = alpha * smoothed_y + (1 - alpha) * screen_y
 
-                # Invertir horizontalmente las coordenadas del puntero
-                inverted_x = pyautogui.size().width - smoothed_x
-                # Dibujar un círculo si el índice y medio están juntos
-                distance_threshold = 30
-                if abs(ix - mx) < distance_threshold and abs(iy - my) < distance_threshold:
-                    cv2.circle(image, (ix, iy), 10, (255, 0, 0), -1)
-                    print("Activo puntero")
-                    pyautogui.moveTo(smoothed_x, smoothed_y)
-                    # Hacer clic si el anular se dobla
-                    if ry < my:
-                       cv2.putText(image, "Haciendo clic", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                       cv2.circle(image, (ix, iy), 12, (255, 255, 255),2)  # Cambia el valor de 2 según el grosor del borde que desees
-                       print("Haciendo click")
-                       pyautogui.click()
-                if gesture_pinch and current_time - last_gesture_time >= time_between_gestures:
-                    if not gesture_active:
-                        keyboard.press('ctrl')
-                        gesture_active = True
+                        # Invertir horizontalmente las coordenadas del puntero
+                    inverted_x = pyautogui.size().width - smoothed_x
+                    # Dibujar un círculo si el índice y medio están juntos
+                    distance_threshold = 30
+                    if abs(ix - mx) < distance_threshold and abs(iy - my) < distance_threshold:
+                        cv2.circle(image, (ix, iy), 10, (255, 0, 0), -1)
+                        print("Activo puntero")
+                        pyautogui.moveTo(smoothed_x, smoothed_y)
+                        # Hacer clic si el anular se dobla
+                        if ry < my:
+                            cv2.putText(image, "Haciendo clic", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                            cv2.circle(image, (ix, iy), 12, (255, 255, 255),2)  # Cambia el valor de 2 según el grosor del borde que desees
+                            pyautogui.click()
+            if gesture_pinch and current_time - last_gesture_time >= time_between_gestures:
+                if not gesture_active:
+                    keyboard.press('ctrl')
+                    gesture_active = True
+                time.sleep(2)
+                print('cambio de pestanias')
+                keyboard.press_and_release('tab')
+            elif gesture_active:
+                keyboard.release('ctrl')
+                gesture_active = False
+            if gesture_pinky:
+                keyboard.press_and_release('right')
+                time.sleep(1)  # Ajusta el tiempo de espera entre acciones
+            # verifica si los dedos están levantados considerando
+            # tanto la distancia como las posiciones relativas de los dedos en el eje Y
+            if ix < mx and iy < my and ry < my:
+                finger_index_up = True
+                finger_pinky_up = True
+                finger_thumb_up = True
+            else:
+                finger_index_up = False
+                finger_pinky_up = False
+                finger_thumb_up = False
+            current_time = time.time()
+            if finger_index_up and finger_pinky_up and finger_thumb_up:
+                if current_time - last_gesture_time >= time_between_gestures:
+                    # Mostrar el One Scrren Keyboard
                     time.sleep(2)
-                    print('cambio de pestanias')
-                    keyboard.press_and_release('tab')
+                    print('teclado')
+                    keyboard.press_and_release('windows + ctrl + o')
+                    last_gesture_time = current_time
 
-                elif gesture_active:
-                    keyboard.release('ctrl')
-                    gesture_active = False
-
-                if gesture_pinky:
-                    keyboard.press_and_release('right')
-                    time.sleep(1)  # Ajusta el tiempo de espera entre acciones
-
-                # verifica si los dedos están levantados considerando
-                # tanto la distancia como las posiciones relativas de los dedos en el eje Y
-                if ix < mx and iy < my and ry < my:
-                    finger_index_up = True
-                    finger_pinky_up = True
-                    finger_thumb_up = True
-                else:
-                    finger_index_up = False
-                    finger_pinky_up = False
-                    finger_thumb_up = False
-                current_time = time.time()
-                if finger_index_up and finger_pinky_up and finger_thumb_up:
-                    if current_time - last_gesture_time >= time_between_gestures:
-                        # Mostrar el One Scrren Keyboard
-                        time.sleep(2)
-                        print('teclado')
-                        keyboard.press_and_release('windows + ctrl + o')
-                        last_gesture_time = current_time
     # Dibujar el rectángulo delimitador en el marco
     cv2.rectangle(image, (bounding_box['left'], bounding_box['top']), (bounding_box['right'], bounding_box['bottom']),
                   (0, 255, 0), 2)
@@ -179,6 +191,6 @@ while cap.isOpened():
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-#hands.close()
+# hands.close()
 cap.release()
 cv2.destroyAllWindows()
